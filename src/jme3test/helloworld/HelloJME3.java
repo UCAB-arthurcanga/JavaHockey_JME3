@@ -19,6 +19,7 @@ import com.jme3.scene.Node;
 import com.jme3.scene.shape.Sphere;
 import com.jme3.scene.shape.Sphere.TextureMode;
 import com.jme3.asset.TextureKey;
+import com.jme3.asset.ModelKey;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Cylinder;
 import com.jme3.scene.Spatial;
@@ -28,6 +29,10 @@ import com.jme3.light.DirectionalLight;
 import com.jme3.font.BitmapText;
 import com.jme3.input.FlyByCamera;
 import com.jme3.system.Timer;
+import com.jme3.input.controls.AnalogListener;
+import com.jme3.input.controls.KeyTrigger;
+import com.jme3.input.KeyInput;
+
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -43,12 +48,15 @@ public class HelloJME3 extends SimpleApplication {
         app.start();
     }
     
+    private boolean isRunning = true;
+    
     Material floor_mat;
     Material wall_mat;
     Material wall2_mat;
     Material stone_mat;
     Material corner_mat;
     Material cannon_mat;
+    Material puck_mat;
     
     private RigidBodyControl    floor_phy;
     private static final Box    floor;
@@ -81,6 +89,10 @@ public class HelloJME3 extends SimpleApplication {
     private RigidBodyControl    cannon2_phy;
     private RigidBodyControl    cannon3_phy;
     private RigidBodyControl    cannon4_phy;
+    //Spatial puck = assetManager.loadModel("Models/a.j3o");
+    //private static final Spatial p;
+    //private static final ModelKey puck2;
+    private RigidBodyControl    puck_physics;
     
     
     private BulletAppState bulletAppState;
@@ -106,8 +118,13 @@ public class HelloJME3 extends SimpleApplication {
         corner2.scaleTextureCoordinates(new Vector2f(3,6));
         corner3.scaleTextureCoordinates(new Vector2f(3,6));
         corner4.scaleTextureCoordinates(new Vector2f(3,6));
-        
     }
+    
+     
+    //p=assetManager.loadModel("Models/a.j3o");
+    //Node test1 = (Node)assetManager.loadModel(p);
+    //Node test2 = (Node)assetManager.loadModel(puck2);
+    //Geometry puck2_g = (Geometry)test2.getChild("puck");
     
     Geometry corner1_geo = new Geometry("Corner", corner1);
     Geometry corner2_geo = new Geometry("Corner", corner2);
@@ -126,20 +143,27 @@ public class HelloJME3 extends SimpleApplication {
     
     
     
+    
+    
     @Override
     public void simpleInitApp() {
         bulletAppState = new BulletAppState();
         stateManager.attach(bulletAppState);
         
-        rootNode.attachChild(n1);
-        rootNode.attachChild(n2);
-        rootNode.attachChild(n3);
-        rootNode.attachChild(n4);
-
-        rootNode.attachChild(cannon1_geo);
-        rootNode.attachChild(cannon2_geo);
-        rootNode.attachChild(cannon3_geo);
-        rootNode.attachChild(cannon4_geo);
+        Spatial puck = assetManager.loadModel("Models/a.j3o");
+        puck_mat = new Material(assetManager, "Common/MatDefs/Misc/ShowNormals.j3md");
+        puck.setMaterial(puck_mat);
+        puck.setLocalTranslation(0f, 0f, 0f);
+        puck_physics = new RigidBodyControl(5f);
+        puck.addControl(puck_physics);
+        bulletAppState.getPhysicsSpace().add(puck_physics);
+        
+        rootNode.attachChild(puck);
+        //puckizq();
+        
+        DirectionalLight sun = new DirectionalLight();
+        sun.setDirection(new Vector3f(-0.1f, -0.7f, -1.0f));
+        rootNode.addLight(sun);
         
         //cam.setLocation(new Vector3f(0,4f,6f));
         //cam.lookAt(new Vector3f(2,2,0), Vector3f.UNIT_Y);
@@ -155,18 +179,38 @@ public class HelloJME3 extends SimpleApplication {
         initMaterials();
         initWall();
         initFloor();
-        initCrossHairs();
         initCorners();
+        initCrossHairs();
         
     }
     
-    /*
+    
     private ActionListener actionListener = new ActionListener() {
-    public void onAction(String name, boolean keyPressed, float tpf) {
-      
-    }
+        @Override
+        public void onAction(String name, boolean keyPressed, float tpf) {
+            if(name.equals("Pause") && !keyPressed)
+                isRunning = !isRunning;
+        }
     };
-    */
+    
+    private final AnalogListener analogListener = new AnalogListener() {
+        @Override
+        public void onAnalog(String name, float value, float tpf){
+            if (isRunning){
+                if (name.equals("Derecha")){
+                    Vector3f v = puck.getLocalTranslation();
+                    puck.setLocalTranslation(v.x + value * speed, v.y, v.z);
+                }
+                if (name.equals("Izquierda")){
+                    Vector3f v = puck.getLocalTranslation();
+                    puck.setLocalTranslation(v.x - value * speed, v.y, v.z);
+                }
+            }  else {
+                System.out.println("PAUSA");
+            }
+        }
+    };
+    
     
     public void makeCannon1(){
         Geometry ball_geo = new Geometry("cannon ball", sphere);
@@ -216,6 +260,11 @@ public class HelloJME3 extends SimpleApplication {
         ball_phy4.setLinearVelocity(c4.mult(3));
     }
     
+    public void puckizq(){
+        Vector3f puck_izq= new Vector3f(-1f,0f,0f);
+        puck_physics.setLinearVelocity(puck_izq.mult(3));
+    }
+    
     public void initMaterials(){
         wall_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         wall2_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
@@ -246,6 +295,9 @@ public class HelloJME3 extends SimpleApplication {
         
         cannon_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         cannon_mat.setColor("Color", ColorRGBA.Blue);
+        
+        puck_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        puck_mat.setColor("Color",ColorRGBA.Red);
     }
     
     public void initCorners(){
@@ -355,6 +407,18 @@ public class HelloJME3 extends SimpleApplication {
         guiNode.attachChild(ch);
     }
     
+     private void initKeys() {
+        // You can map one or several inputs to one named action
+        inputManager.addMapping("Pause",  new KeyTrigger(KeyInput.KEY_P));
+        inputManager.addMapping("Izquierda",   new KeyTrigger(KeyInput.KEY_A));
+        inputManager.addMapping("Derecha",  new KeyTrigger(KeyInput.KEY_D));
+                                        
+        // Add the names to the action listener.
+        inputManager.addListener(actionListener, "Pause");
+        inputManager.addListener(analogListener, "Izquierda", "Derecha");
+
+    }
+    
     @Override
     public void simpleUpdate(float tpf){
         int cannon;
@@ -371,6 +435,18 @@ public class HelloJME3 extends SimpleApplication {
                 makeCannon4(); 
             peloticastime.reset();
         }
+        puckizq();
+        Timer mov_puck=getTimer();
+        Vector3f puck_izq= new Vector3f(-1f,0f,0f);
+        Vector3f puck_der= new Vector3f(1f,0f,0f);
+        if(mov_puck.getTimeInSeconds()<5){
+            puck_physics.setLinearVelocity(puck_izq.mult(3));
+        }
+        if(mov_puck.getTimeInSeconds()>=5){
+            puck_physics.setLinearVelocity(puck_der.mult(6));
+            mov_puck.reset();
+    }
+        
         
     }
     
