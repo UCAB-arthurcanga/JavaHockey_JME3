@@ -4,6 +4,12 @@ import com.jme3.app.SimpleApplication;
 import com.jme3.material.Material;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.control.RigidBodyControl;
+import com.jme3.bullet.collision.shapes.SphereCollisionShape;
+import com.jme3.bullet.collision.shapes.CylinderCollisionShape;
+import com.jme3.bullet.collision.shapes.BoxCollisionShape;
+import com.jme3.bullet.collision.shapes.CapsuleCollisionShape;
+import com.jme3.bullet.collision.shapes.CollisionShape;
+import com.jme3.bullet.util.CollisionShapeFactory;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.MouseButtonTrigger;
 import com.jme3.input.MouseInput;
@@ -32,7 +38,9 @@ import com.jme3.system.Timer;
 import com.jme3.input.controls.AnalogListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.input.KeyInput;
-
+import com.jme3.input.ChaseCamera;
+import com.jme3.scene.CameraNode;
+import com.jme3.scene.control.CameraControl.ControlDirection;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -89,20 +97,23 @@ public class HelloJME3 extends SimpleApplication {
     private RigidBodyControl    cannon2_phy;
     private RigidBodyControl    cannon3_phy;
     private RigidBodyControl    cannon4_phy;
-    //Spatial puck = assetManager.loadModel("Models/a.j3o");
-    //private static final Spatial p;
+    private Spatial             puck;
+    //private static final ModelKey p;
     //private static final ModelKey puck2;
     private RigidBodyControl    puck_physics;
-    
+    private Geometry ball_geo;
+    private Geometry ball_geo2;
+    private Geometry ball_geo3;
+    private Geometry ball_geo4;
     
     private BulletAppState bulletAppState;
     
     static {
         floor = new Box(5f,0.1f,5f);
         floor.scaleTextureCoordinates(new Vector2f(3, 6));
-        wall = new Box(0.1f,.3f,5f);
+        wall = new Box(0.1f,.3f,3.5f);
         wall.scaleTextureCoordinates(new Vector2f(3, 6));
-        wall2 = new Box(0.1f,.3f,5f);
+        wall2 = new Box(0.1f,.3f,3.5f);
         wall2.scaleTextureCoordinates(new Vector2f(3, 6));
         sphere = new Sphere(32, 32, 0.1f, true, false);
         sphere.setTextureMode(TextureMode.Projected);
@@ -120,11 +131,11 @@ public class HelloJME3 extends SimpleApplication {
         corner4.scaleTextureCoordinates(new Vector2f(3,6));
     }
     
-     
-    //p=assetManager.loadModel("Models/a.j3o");
-    //Node test1 = (Node)assetManager.loadModel(p);
-    //Node test2 = (Node)assetManager.loadModel(puck2);
-    //Geometry puck2_g = (Geometry)test2.getChild("puck");
+    public void initPuck(){
+        puck = assetManager.loadModel("Models/Circle.mesh.xml");
+        puck.setLocalTranslation(0f, 0f, 0f);
+        rootNode.attachChild(puck);
+    }
     
     Geometry corner1_geo = new Geometry("Corner", corner1);
     Geometry corner2_geo = new Geometry("Corner", corner2);
@@ -142,24 +153,12 @@ public class HelloJME3 extends SimpleApplication {
     Node n4 = new Node("c4");
     
     
-    
-    
-    
     @Override
     public void simpleInitApp() {
         bulletAppState = new BulletAppState();
         stateManager.attach(bulletAppState);
         
-        Spatial puck = assetManager.loadModel("Models/a.j3o");
-        puck_mat = new Material(assetManager, "Common/MatDefs/Misc/ShowNormals.j3md");
-        puck.setMaterial(puck_mat);
-        puck.setLocalTranslation(0f, 0f, 0f);
-        puck_physics = new RigidBodyControl(5f);
-        puck.addControl(puck_physics);
-        bulletAppState.getPhysicsSpace().add(puck_physics);
-        
-        rootNode.attachChild(puck);
-        //puckizq();
+        bulletAppState.setDebugEnabled(true);
         
         DirectionalLight sun = new DirectionalLight();
         sun.setDirection(new Vector3f(-0.1f, -0.7f, -1.0f));
@@ -171,7 +170,6 @@ public class HelloJME3 extends SimpleApplication {
         flyCam.setMoveSpeed(10);
         flyCam.setRotationSpeed(10);
         
-        
         //inputManager.addMapping("shoot",
             //new MouseButtonTrigger(MouseInput.BUTTON_LEFT));
         //inputManager.addListener(actionListener, "shoot");
@@ -180,7 +178,25 @@ public class HelloJME3 extends SimpleApplication {
         initWall();
         initFloor();
         initCorners();
-        initCrossHairs();
+        initPuck();
+        initCol();
+        //ChaseCamera chaseCam = new ChaseCamera(cam, puck, inputManager);
+        //chaseCam.setSmoothMotion(true);
+        
+        /*// Disable the default flyby cam
+        flyCam.setEnabled(false);
+        //create the camera Node
+        camNode = new CameraNode("Camera Node", cam);
+        //This mode means that camera copies the movements of the target:
+        camNode.setControlDir(ControlDirection.SpatialToCamera);
+        
+        //Move camNode, e.g. behind and above the target:
+        camNode.setLocalTranslation(new Vector3f(0, 1, -1));
+        //Rotate the camNode to look at the target:
+        camNode.lookAt(puck.getLocalTranslation(), Vector3f.UNIT_Y);*/
+        
+        //initKeys();
+        //initCrossHairs();
         
     }
     
@@ -199,11 +215,13 @@ public class HelloJME3 extends SimpleApplication {
             if (isRunning){
                 if (name.equals("Derecha")){
                     Vector3f v = puck.getLocalTranslation();
-                    puck.setLocalTranslation(v.x + value * speed, v.y, v.z);
+                    v.x+=value*speed*5;
+                    puck_physics.setPhysicsLocation(v);
                 }
                 if (name.equals("Izquierda")){
                     Vector3f v = puck.getLocalTranslation();
-                    puck.setLocalTranslation(v.x - value * speed, v.y, v.z);
+                    v.x-=value*speed*5;
+                    puck_physics.setPhysicsLocation(v);
                 }
             }  else {
                 System.out.println("PAUSA");
@@ -216,56 +234,56 @@ public class HelloJME3 extends SimpleApplication {
         Geometry ball_geo = new Geometry("cannon ball", sphere);
         ball_geo.setMaterial(stone_mat);
         ball_geo.setLocalTranslation(3.9f,.4f,3.4f);
-        rootNode.attachChild(ball_geo);
         Vector3f c1 = new Vector3f(-1f,0f,-1f);
-        ball_phy = new RigidBodyControl(5f);
+        ball_phy = new RigidBodyControl(ballCol, .01f);
         ball_geo.addControl(ball_phy);
+        ball_phy.setRestitution(1f);
         bulletAppState.getPhysicsSpace().add(ball_phy);
         ball_phy.setLinearVelocity(c1.mult(3));
+        rootNode.attachChild(ball_geo);
     }
     
     public void makeCannon2(){
         Geometry ball_geo2 = new Geometry("cannon ball", sphere);
         ball_geo2.setMaterial(stone_mat);
         ball_geo2.setLocalTranslation(-3.9f,.4f,3.4f);
-        rootNode.attachChild(ball_geo2);
         Vector3f c2 = new Vector3f(1f,0f,-1f);
-        ball_phy2 = new RigidBodyControl(5f);
+        ball_phy2 = new RigidBodyControl(ballCol, .01f);
         ball_geo2.addControl(ball_phy2);
+        ball_phy2.setRestitution(1f);
         bulletAppState.getPhysicsSpace().add(ball_phy2);
         ball_phy2.setLinearVelocity(c2.mult(3));
+        rootNode.attachChild(ball_geo2);
     }
     
     public void makeCannon3(){
         Geometry ball_geo3 = new Geometry("cannon ball", sphere);
         ball_geo3.setMaterial(stone_mat);
         ball_geo3.setLocalTranslation(-3.9f,.4f,-3.4f);
-        rootNode.attachChild(ball_geo3);
         Vector3f c3 = new Vector3f(1f,0f,1f);
-        ball_phy3 = new RigidBodyControl(5f);
+        ball_phy3 = new RigidBodyControl(ballCol, .01f);
         ball_geo3.addControl(ball_phy3);
+        ball_phy3.setRestitution(1f);
         bulletAppState.getPhysicsSpace().add(ball_phy3);
         ball_phy3.setLinearVelocity(c3.mult(3));
+        rootNode.attachChild(ball_geo3);
     }
     
     public void makeCannon4(){
         Geometry ball_geo4 = new Geometry("cannon ball", sphere);
         ball_geo4.setMaterial(stone_mat);
         ball_geo4.setLocalTranslation(3.9f,.4f,-3.4f);
-        rootNode.attachChild(ball_geo4);
         Vector3f c4 = new Vector3f(-1f,0f,1f);
-        ball_phy4 = new RigidBodyControl(5f);
+        ball_phy4 = new RigidBodyControl(ballCol, .01f);
         ball_geo4.addControl(ball_phy4);
+        ball_phy4.setRestitution(1f);
         bulletAppState.getPhysicsSpace().add(ball_phy4);
         ball_phy4.setLinearVelocity(c4.mult(3));
-    }
-    
-    public void puckizq(){
-        Vector3f puck_izq= new Vector3f(-1f,0f,0f);
-        puck_physics.setLinearVelocity(puck_izq.mult(3));
+        rootNode.attachChild(ball_geo4);
     }
     
     public void initMaterials(){
+        
         wall_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         wall2_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         TextureKey key = new TextureKey("Textures/Terrain/BrickWall/BrickWall.jpg");
@@ -296,8 +314,6 @@ public class HelloJME3 extends SimpleApplication {
         cannon_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         cannon_mat.setColor("Color", ColorRGBA.Blue);
         
-        puck_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        puck_mat.setColor("Color",ColorRGBA.Red);
     }
     
     public void initCorners(){
@@ -327,17 +343,6 @@ public class HelloJME3 extends SimpleApplication {
         cannon3_geo.rotate(0f,FastMath.PI/4,0f);
         cannon4_geo.rotate(0f,3*FastMath.PI/4,0f);
         
-        
-        rootNode.attachChild(corner1_geo);
-        rootNode.attachChild(corner2_geo);
-        rootNode.attachChild(corner3_geo);
-        rootNode.attachChild(corner4_geo);
-        
-        rootNode.attachChild(cannon1_geo);
-        rootNode.attachChild(cannon2_geo);
-        rootNode.attachChild(cannon3_geo);
-        rootNode.attachChild(cannon4_geo);
-        
         corner1_phy = new RigidBodyControl(0f);
         corner2_phy = new RigidBodyControl(0f);
         corner3_phy = new RigidBodyControl(0f);
@@ -362,7 +367,27 @@ public class HelloJME3 extends SimpleApplication {
         bulletAppState.getPhysicsSpace().add(cannon1_phy);
         bulletAppState.getPhysicsSpace().add(cannon2_phy);
         bulletAppState.getPhysicsSpace().add(cannon3_phy);
-        bulletAppState.getPhysicsSpace().add(cannon4_phy);  
+        bulletAppState.getPhysicsSpace().add(cannon4_phy);
+        
+        corner1_phy.setRestitution(.5f);
+        corner2_phy.setRestitution(.5f);
+        corner3_phy.setRestitution(.5f);
+        corner4_phy.setRestitution(.5f);
+        
+        cannon1_phy.setRestitution(.5f);
+        cannon2_phy.setRestitution(.5f);
+        cannon3_phy.setRestitution(.5f);
+        cannon4_phy.setRestitution(.5f);
+        
+        rootNode.attachChild(corner1_geo);
+        rootNode.attachChild(corner2_geo);
+        rootNode.attachChild(corner3_geo);
+        rootNode.attachChild(corner4_geo);
+        
+        rootNode.attachChild(cannon1_geo);
+        rootNode.attachChild(cannon2_geo);
+        rootNode.attachChild(cannon3_geo);
+        rootNode.attachChild(cannon4_geo); 
     }
     
     public void initFloor(){
@@ -380,16 +405,18 @@ public class HelloJME3 extends SimpleApplication {
         Geometry wall_geo = new Geometry("Wall", wall);
         Geometry wall2_geo = new Geometry("Wall", wall2);
         wall_geo.setMaterial(wall_mat);
-        wall_geo.setLocalTranslation(-4.9f,0.3f,0);
+        wall_geo.setLocalTranslation(-4.9f,0.3f,0f);
         rootNode.attachChild(wall_geo);
         wall_phy = new RigidBodyControl(0.0f);
         wall_geo.addControl(wall_phy);
+        wall_phy.setRestitution(.5f);
         bulletAppState.getPhysicsSpace().add(wall_phy);
         wall2_geo.setMaterial(wall_mat);
-        wall2_geo.setLocalTranslation(4.9f,0.3f,0);
+        wall2_geo.setLocalTranslation(4.9f,0.3f,0f);
         rootNode.attachChild(wall2_geo);
         wall2_phy = new RigidBodyControl(0.0f);
         wall2_geo.addControl(wall2_phy);
+        wall2_phy.setRestitution(.5f);
         bulletAppState.getPhysicsSpace().add(wall2_phy);
     }
     
@@ -410,8 +437,8 @@ public class HelloJME3 extends SimpleApplication {
      private void initKeys() {
         // You can map one or several inputs to one named action
         inputManager.addMapping("Pause",  new KeyTrigger(KeyInput.KEY_P));
-        inputManager.addMapping("Izquierda",   new KeyTrigger(KeyInput.KEY_A));
-        inputManager.addMapping("Derecha",  new KeyTrigger(KeyInput.KEY_D));
+        inputManager.addMapping("Izquierda",   new KeyTrigger(KeyInput.KEY_J));
+        inputManager.addMapping("Derecha",  new KeyTrigger(KeyInput.KEY_L));
                                         
         // Add the names to the action listener.
         inputManager.addListener(actionListener, "Pause");
@@ -434,21 +461,20 @@ public class HelloJME3 extends SimpleApplication {
             if (cannon==4)
                 makeCannon4(); 
             peloticastime.reset();
-        }
-        puckizq();
-        Timer mov_puck=getTimer();
-        Vector3f puck_izq= new Vector3f(-1f,0f,0f);
-        Vector3f puck_der= new Vector3f(1f,0f,0f);
-        if(mov_puck.getTimeInSeconds()<5){
-            puck_physics.setLinearVelocity(puck_izq.mult(3));
-        }
-        if(mov_puck.getTimeInSeconds()>=5){
-            puck_physics.setLinearVelocity(puck_der.mult(6));
-            mov_puck.reset();
-    }
-        
-        
+        }  
     }
     
+    public CollisionShape puckCol;
+    public CollisionShape ballCol;
+    
+    public void initCol(){
+        puckCol = CollisionShapeFactory.createMeshShape((Node) puck);
+        puck_physics = new RigidBodyControl(puckCol, 0f);
+        puck_physics.setRestitution(3.5f);
+        puck.addControl(puck_physics);
+        bulletAppState.getPhysicsSpace().add(puck_physics);
+        
+        ballCol = new SphereCollisionShape(0.1f);
+    }
 }
        
