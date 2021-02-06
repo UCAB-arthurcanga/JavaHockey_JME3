@@ -2,30 +2,24 @@ package jme3test.helloworld;
 
 import com.jme3.app.SimpleApplication;
 import com.jme3.material.Material;
+import com.jme3.material.RenderState.*;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.control.RigidBodyControl;
-import com.jme3.bullet.collision.shapes.SphereCollisionShape;
-import com.jme3.bullet.collision.shapes.CylinderCollisionShape;
-import com.jme3.bullet.collision.shapes.BoxCollisionShape;
-import com.jme3.bullet.collision.shapes.CapsuleCollisionShape;
 import com.jme3.bullet.collision.shapes.CollisionShape;
 import com.jme3.bullet.util.CollisionShapeFactory;
 import com.jme3.input.controls.ActionListener;
-import com.jme3.input.controls.MouseButtonTrigger;
-import com.jme3.input.MouseInput;
 import com.jme3.math.ColorRGBA;
 import com.jme3.math.FastMath;
 import com.jme3.math.Vector3f;
 import com.jme3.math.Vector2f;
-import com.jme3.math.Quaternion;
-import com.jme3.math.Ray;
-import com.jme3.renderer.RenderManager;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
 import com.jme3.scene.shape.Sphere;
 import com.jme3.scene.shape.Sphere.TextureMode;
 import com.jme3.asset.TextureKey;
-import com.jme3.asset.ModelKey;
+import com.jme3.bullet.PhysicsSpace;
+import com.jme3.bullet.collision.PhysicsCollisionEvent;
+import com.jme3.bullet.collision.PhysicsCollisionListener;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Cylinder;
 import com.jme3.scene.Spatial;
@@ -33,27 +27,26 @@ import com.jme3.texture.Texture;
 import com.jme3.texture.Texture.WrapMode;
 import com.jme3.light.DirectionalLight;
 import com.jme3.font.BitmapText;
-import com.jme3.input.FlyByCamera;
 import com.jme3.system.Timer;
 import com.jme3.input.controls.AnalogListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.input.KeyInput;
-import com.jme3.input.ChaseCamera;
-import com.jme3.scene.CameraNode;
-import com.jme3.scene.control.CameraControl.ControlDirection;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This is the Main Class of your Game. You should only do initialization here.
  * Move your Logic into AppStates or Controls
  * @author normenhansen
  */
-public class HelloJME3 extends SimpleApplication {
+public class HelloJME3 extends SimpleApplication implements PhysicsCollisionListener{
 
     public static void main(String[] args) {
         HelloJME3 app = new HelloJME3();
         app.start();
+    }
+    
+    private PhysicsSpace getPhysicsSpace(){
+        return bulletAppState.getPhysicsSpace();
     }
     
     private boolean isRunning = true;
@@ -65,6 +58,7 @@ public class HelloJME3 extends SimpleApplication {
     Material corner_mat;
     Material cannon_mat;
     Material puck_mat;
+    Material porteria_mat;
     
     private RigidBodyControl    floor_phy;
     private static final Box    floor;
@@ -73,6 +67,15 @@ public class HelloJME3 extends SimpleApplication {
     private static final Box    wall;
     private RigidBodyControl    wall2_phy;
     private static final Box    wall2;
+    
+    private static final Box    porteria_h;
+    private static final Box    porteria_v;
+    //Me encantaria saber por que tengo que declarar 4 fisicas distintas para un
+    //mismo comportamiento en 4 lugares distintos, pero alright then, keep your secrets jmonkey
+    private RigidBodyControl    porteria1_phy;
+    private RigidBodyControl    porteria2_phy;
+    private RigidBodyControl    porteria3_phy;
+    private RigidBodyControl    porteria4_phy;
     
     private RigidBodyControl    ball_phy;
     private RigidBodyControl    ball_phy2;
@@ -98,13 +101,13 @@ public class HelloJME3 extends SimpleApplication {
     private RigidBodyControl    cannon3_phy;
     private RigidBodyControl    cannon4_phy;
     private Spatial             puck;
-    //private static final ModelKey p;
-    //private static final ModelKey puck2;
     private RigidBodyControl    puck_physics;
     private Geometry ball_geo;
     private Geometry ball_geo2;
     private Geometry ball_geo3;
     private Geometry ball_geo4;
+    
+    private player player1;
     
     private BulletAppState bulletAppState;
     
@@ -129,12 +132,17 @@ public class HelloJME3 extends SimpleApplication {
         corner2.scaleTextureCoordinates(new Vector2f(3,6));
         corner3.scaleTextureCoordinates(new Vector2f(3,6));
         corner4.scaleTextureCoordinates(new Vector2f(3,6));
+        porteria_h = new Box(4.12f,.25f,.1f);
+        porteria_v = new Box(.1f,.25f,4.12f);
     }
     
     public void initPuck(){
         puck = assetManager.loadModel("Models/Circle.mesh.xml");
         puck.setLocalTranslation(0f, 0f, 0f);
+        puck.setName("player1");
         rootNode.attachChild(puck);
+        //A esto me refiero, lo coloqué pero nunca uso el objeto, tengo que reconfigurar como usarlo
+        player1=new player(puck, puck_physics, p1,ColorRGBA.Red,"ElPatoMacho",1);
     }
     
     Geometry corner1_geo = new Geometry("Corner", corner1);
@@ -146,19 +154,17 @@ public class HelloJME3 extends SimpleApplication {
     Geometry cannon2_geo = new Geometry("Cannon", cannon2);
     Geometry cannon3_geo = new Geometry("Cannon", cannon3);
     Geometry cannon4_geo = new Geometry("Cannon", cannon4);
-    
-    Node n1 = new Node("c1");
-    Node n2 = new Node("c2");
-    Node n3 = new Node("c3");
-    Node n4 = new Node("c4");
-    
+
     
     @Override
     public void simpleInitApp() {
         bulletAppState = new BulletAppState();
         stateManager.attach(bulletAppState);
         
-        bulletAppState.setDebugEnabled(true);
+        //bulletAppState.setDebugEnabled(true);
+        
+        setDisplayStatView(false);
+        setDisplayFps(false);
         
         DirectionalLight sun = new DirectionalLight();
         sun.setDirection(new Vector3f(-0.1f, -0.7f, -1.0f));
@@ -180,10 +186,10 @@ public class HelloJME3 extends SimpleApplication {
         initCorners();
         initPuck();
         initCol();
-        //ChaseCamera chaseCam = new ChaseCamera(cam, puck, inputManager);
-        //chaseCam.setSmoothMotion(true);
+        initPorterias();
+        initHUD();
         
-        /*// Disable the default flyby cam
+        /*
         flyCam.setEnabled(false);
         //create the camera Node
         camNode = new CameraNode("Camera Node", cam);
@@ -195,8 +201,9 @@ public class HelloJME3 extends SimpleApplication {
         //Rotate the camNode to look at the target:
         camNode.lookAt(puck.getLocalTranslation(), Vector3f.UNIT_Y);*/
         
+        getPhysicsSpace().addCollisionListener(this);
+        
         //initKeys();
-        //initCrossHairs();
         
     }
     
@@ -233,11 +240,13 @@ public class HelloJME3 extends SimpleApplication {
     public void makeCannon1(){
         Geometry ball_geo = new Geometry("cannon ball", sphere);
         ball_geo.setMaterial(stone_mat);
-        ball_geo.setLocalTranslation(3.9f,.4f,3.4f);
+        ball_geo.setLocalTranslation(3.9f,.25f,3.4f);
         Vector3f c1 = new Vector3f(-1f,0f,-1f);
-        ball_phy = new RigidBodyControl(ballCol, .01f);
+        ball_phy = new RigidBodyControl(.01f);
         ball_geo.addControl(ball_phy);
         ball_phy.setRestitution(1f);
+        ball_phy.setCcdSweptSphereRadius(.1f);
+        ball_phy.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(ball_phy);
         ball_phy.setLinearVelocity(c1.mult(3));
         rootNode.attachChild(ball_geo);
@@ -246,11 +255,13 @@ public class HelloJME3 extends SimpleApplication {
     public void makeCannon2(){
         Geometry ball_geo2 = new Geometry("cannon ball", sphere);
         ball_geo2.setMaterial(stone_mat);
-        ball_geo2.setLocalTranslation(-3.9f,.4f,3.4f);
+        ball_geo2.setLocalTranslation(-3.9f,.25f,3.4f);
         Vector3f c2 = new Vector3f(1f,0f,-1f);
-        ball_phy2 = new RigidBodyControl(ballCol, .01f);
+        ball_phy2 = new RigidBodyControl(.01f);
         ball_geo2.addControl(ball_phy2);
         ball_phy2.setRestitution(1f);
+        ball_phy2.setCcdSweptSphereRadius(.1f);
+        ball_phy2.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(ball_phy2);
         ball_phy2.setLinearVelocity(c2.mult(3));
         rootNode.attachChild(ball_geo2);
@@ -259,11 +270,13 @@ public class HelloJME3 extends SimpleApplication {
     public void makeCannon3(){
         Geometry ball_geo3 = new Geometry("cannon ball", sphere);
         ball_geo3.setMaterial(stone_mat);
-        ball_geo3.setLocalTranslation(-3.9f,.4f,-3.4f);
+        ball_geo3.setLocalTranslation(-3.9f,.25f,-3.4f);
         Vector3f c3 = new Vector3f(1f,0f,1f);
-        ball_phy3 = new RigidBodyControl(ballCol, .01f);
+        ball_phy3 = new RigidBodyControl(.01f);
         ball_geo3.addControl(ball_phy3);
         ball_phy3.setRestitution(1f);
+        ball_phy3.setCcdMotionThreshold(Float.MIN_VALUE);
+        ball_phy3.setCcdSweptSphereRadius(.1f);
         bulletAppState.getPhysicsSpace().add(ball_phy3);
         ball_phy3.setLinearVelocity(c3.mult(3));
         rootNode.attachChild(ball_geo3);
@@ -272,15 +285,19 @@ public class HelloJME3 extends SimpleApplication {
     public void makeCannon4(){
         Geometry ball_geo4 = new Geometry("cannon ball", sphere);
         ball_geo4.setMaterial(stone_mat);
-        ball_geo4.setLocalTranslation(3.9f,.4f,-3.4f);
+        ball_geo4.setLocalTranslation(3.9f,.25f,-3.4f);
         Vector3f c4 = new Vector3f(-1f,0f,1f);
-        ball_phy4 = new RigidBodyControl(ballCol, .01f);
+        ball_phy4 = new RigidBodyControl(.01f);
         ball_geo4.addControl(ball_phy4);
         ball_phy4.setRestitution(1f);
+        ball_phy4.setCcdSweptSphereRadius(.1f);
+        ball_phy4.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(ball_phy4);
         ball_phy4.setLinearVelocity(c4.mult(3));
         rootNode.attachChild(ball_geo4);
     }
+    
+    Material player1_mat;
     
     public void initMaterials(){
         
@@ -299,11 +316,8 @@ public class HelloJME3 extends SimpleApplication {
         tex3.setWrap(WrapMode.Repeat);
         floor_mat.setTexture("ColorMap", tex3);
     
-        stone_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        TextureKey key2 = new TextureKey("Textures/Terrain/Rock/Rock.PNG");
-        key2.setGenerateMips(true);
-        Texture tex2 = assetManager.loadTexture(key2);
-        stone_mat.setTexture("ColorMap", tex2);
+        stone_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");       
+        stone_mat.setColor("Color", ColorRGBA.Gray);
         
         corner_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         TextureKey key4 = new TextureKey("Textures/Terrain/BrickWall/BrickWall.jpg");
@@ -313,6 +327,14 @@ public class HelloJME3 extends SimpleApplication {
         
         cannon_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         cannon_mat.setColor("Color", ColorRGBA.Blue);
+        
+        player1_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        player1_mat.setColor("Color",ColorRGBA.Red);
+        
+        porteria_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        ColorRGBA transparente = new ColorRGBA(1,1,1,0);
+        porteria_mat.setColor("Color",transparente);
+        porteria_mat.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
         
     }
     
@@ -334,10 +356,10 @@ public class HelloJME3 extends SimpleApplication {
         cannon2_geo.setMaterial(cannon_mat);
         cannon3_geo.setMaterial(cannon_mat);
         cannon4_geo.setMaterial(cannon_mat);
-        cannon1_geo.setLocalTranslation(4.15f,.4f,3.65f);
-        cannon2_geo.setLocalTranslation(-4.15f,.4f,3.65f);
-        cannon3_geo.setLocalTranslation(-4.15f,.4f,-3.65f);
-        cannon4_geo.setLocalTranslation(4.15f,.4f,-3.65f);
+        cannon1_geo.setLocalTranslation(4.15f,.25f,3.65f);
+        cannon2_geo.setLocalTranslation(-4.15f,.25f,3.65f);
+        cannon3_geo.setLocalTranslation(-4.15f,.25f,-3.65f);
+        cannon4_geo.setLocalTranslation(4.15f,.25f,-3.65f);
         cannon1_geo.rotate(0f,FastMath.PI/4,0f);       
         cannon2_geo.rotate(0f,3*FastMath.PI/4,0f);       
         cannon3_geo.rotate(0f,FastMath.PI/4,0f);
@@ -369,15 +391,23 @@ public class HelloJME3 extends SimpleApplication {
         bulletAppState.getPhysicsSpace().add(cannon3_phy);
         bulletAppState.getPhysicsSpace().add(cannon4_phy);
         
-        corner1_phy.setRestitution(.5f);
-        corner2_phy.setRestitution(.5f);
-        corner3_phy.setRestitution(.5f);
-        corner4_phy.setRestitution(.5f);
-        
-        cannon1_phy.setRestitution(.5f);
-        cannon2_phy.setRestitution(.5f);
-        cannon3_phy.setRestitution(.5f);
-        cannon4_phy.setRestitution(.5f);
+        corner1_phy.setRestitution(.7f);
+        corner2_phy.setRestitution(.7f);
+        corner3_phy.setRestitution(.7f);
+        corner4_phy.setRestitution(.7f);
+        corner1_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        corner2_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        corner3_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        corner4_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+       
+        cannon1_phy.setRestitution(.7f);
+        cannon2_phy.setRestitution(.7f);
+        cannon3_phy.setRestitution(.7f);
+        cannon4_phy.setRestitution(.7f);
+        cannon1_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        cannon2_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        cannon3_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        cannon4_phy.setCcdMotionThreshold(Float.MIN_VALUE);
         
         rootNode.attachChild(corner1_geo);
         rootNode.attachChild(corner2_geo);
@@ -398,6 +428,7 @@ public class HelloJME3 extends SimpleApplication {
         /* Make the floor physical with mass 0.0f! */
         floor_phy = new RigidBodyControl(0.0f);
         floor_geo.addControl(floor_phy);
+        floor_phy.setFriction(0.6f);
         bulletAppState.getPhysicsSpace().add(floor_phy);
     }
     
@@ -409,32 +440,20 @@ public class HelloJME3 extends SimpleApplication {
         rootNode.attachChild(wall_geo);
         wall_phy = new RigidBodyControl(0.0f);
         wall_geo.addControl(wall_phy);
-        wall_phy.setRestitution(.5f);
+        wall_phy.setRestitution(.8f);
         bulletAppState.getPhysicsSpace().add(wall_phy);
         wall2_geo.setMaterial(wall_mat);
         wall2_geo.setLocalTranslation(4.9f,0.3f,0f);
         rootNode.attachChild(wall2_geo);
         wall2_phy = new RigidBodyControl(0.0f);
         wall2_geo.addControl(wall2_phy);
-        wall2_phy.setRestitution(.5f);
+        wall2_phy.setRestitution(.8f);
+        wall_phy.setCcdMotionThreshold(Float.MIN_VALUE);
+        wall2_phy.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(wall2_phy);
     }
     
-
-    /** A plus sign used as crosshairs to help the player with aiming.*/
-    protected void initCrossHairs() {
-        guiNode.detachAllChildren();
-        guiFont = assetManager.loadFont("Interface/Fonts/Default.fnt");
-        BitmapText ch = new BitmapText(guiFont, false);
-        ch.setSize(guiFont.getCharSet().getRenderedSize() * 2);
-        ch.setText("+");        // fake crosshairs :)
-        ch.setLocalTranslation( // center
-          settings.getWidth() / 2 - guiFont.getCharSet().getRenderedSize() / 3 * 2,
-          settings.getHeight() / 2 + ch.getLineHeight() / 2, 0);
-        guiNode.attachChild(ch);
-    }
-    
-     private void initKeys() {
+    private void initKeys() {
         // You can map one or several inputs to one named action
         inputManager.addMapping("Pause",  new KeyTrigger(KeyInput.KEY_P));
         inputManager.addMapping("Izquierda",   new KeyTrigger(KeyInput.KEY_J));
@@ -461,20 +480,130 @@ public class HelloJME3 extends SimpleApplication {
             if (cannon==4)
                 makeCannon4(); 
             peloticastime.reset();
-        }  
+        } 
     }
     
-    public CollisionShape puckCol;
-    public CollisionShape ballCol;
+    private CollisionShape puckCol;
     
     public void initCol(){
         puckCol = CollisionShapeFactory.createMeshShape((Node) puck);
         puck_physics = new RigidBodyControl(puckCol, 0f);
-        puck_physics.setRestitution(3.5f);
+        puck_physics.setRestitution(1.5f);
         puck.addControl(puck_physics);
+        puck_physics.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(puck_physics);
-        
-        ballCol = new SphereCollisionShape(0.1f);
     }
+    
+    Geometry p1 = new Geometry("porteria",porteria_h);
+    Geometry p2 = new Geometry("porteria",porteria_h);
+    Geometry p3 = new Geometry("porteria",porteria_v);
+    Geometry p4 = new Geometry("porteria",porteria_v);
+    
+    //Luego convertiré esto en 3 funciones, una para dos porterías y otras dos para las dos faltantes
+    public void initPorterias(){
+        p1.setMaterial(porteria_mat);
+        p2.setMaterial(porteria_mat);
+        p3.setMaterial(porteria_mat);
+        p4.setMaterial(porteria_mat);
+        
+        p1.setLocalTranslation(0,0f,5.2f);
+        p2.setLocalTranslation(0,0f,-5.2f);
+        p3.setLocalTranslation(5.2f,0f,0);
+        p4.setLocalTranslation(-5.2f,0f,0);
+        rootNode.attachChild(p1);
+        rootNode.attachChild(p2);
+        rootNode.attachChild(p3);
+        rootNode.attachChild(p4);
+        
+        porteria1_phy = new RigidBodyControl(0f);
+        porteria2_phy = new RigidBodyControl(0f);
+        porteria3_phy = new RigidBodyControl(0f);
+        porteria4_phy = new RigidBodyControl(0f);
+        p1.addControl(porteria1_phy);
+        p2.addControl(porteria2_phy);
+        p3.addControl(porteria3_phy);
+        p4.addControl(porteria4_phy);
+        
+        //p1.setQueueBucket(RenderQueue.Bucket.Transparent);
+        
+        
+        
+        bulletAppState.getPhysicsSpace().add(porteria1_phy);
+        bulletAppState.getPhysicsSpace().add(porteria2_phy);
+        bulletAppState.getPhysicsSpace().add(porteria3_phy);
+        bulletAppState.getPhysicsSpace().add(porteria4_phy);
+    }
+    
+    private Integer peloticas_killed=0;
+    
+    public BitmapText name;
+    public BitmapText count;
+    
+    public void initHUD(){
+        name = new BitmapText(guiFont, false);
+        name.setSize(guiFont.getCharSet().getRenderedSize());      // font size
+        name.setColor(ColorRGBA.White);                             // font color
+        name.setText("PeloticaKiller");             // the text
+        name.setLocalTranslation(30, settings.getHeight()-name.getLineHeight(), 0); // position
+        guiNode.attachChild(name);
+        count = new BitmapText(guiFont, false);
+        count.setSize(guiFont.getCharSet().getRenderedSize());
+        count.setColor(ColorRGBA.White);
+        if(peloticas_killed==0)
+            count.setText(peloticas_killed.toString());
+        count.setLocalTranslation(name.getLineWidth(), 
+                settings.getHeight()-count.getLineHeight()-name.getLineHeight(), 0);
+        guiNode.attachChild(count);
+        
+    }
+    
+    
+    @Override
+    public void collision(PhysicsCollisionEvent event) {
+        if("cannon ball".equals(event.getNodeA().getName()) || "cannon ball".equals(event.getNodeB().getName() )){
+            if ("player1".equals(event.getNodeA().getName()) || "player1".equals(event.getNodeB().getName() ) ){
+                if("cannon ball".equals(event.getNodeA().getName())){
+                    event.getNodeA().setMaterial(player1_mat);
+                }
+                else {
+                    event.getNodeB().setMaterial(player1_mat);
+                }
+            }
+        
+            if ("porteria".equals(event.getNodeA().getName()) || "porteria".equals(event.getNodeB().getName())){
+                if("cannon ball".equals(event.getNodeA().getName())){
+                    //Imagínate hacer todo este desastre para poder obtener el color
+                    //Imagínate hacer un juego en Java <8^D
+                    ColorRGBA rgb=(ColorRGBA)((Geometry)event.getNodeA()).getMaterial().getParam("Color").getValue();
+                    if (rgb.equals(ColorRGBA.Red)){
+                        peloticas_killed++;
+                        count.setText(peloticas_killed.toString());
+                        rootNode.detachChild(event.getNodeA());
+                        bulletAppState.getPhysicsSpace().remove(event.getNodeA());
+                    }
+                }
+                
+                if("cannon ball".equals(event.getNodeB().getName())){
+                    //Auxilio...
+                    ColorRGBA rgb=(ColorRGBA)((Geometry)event.getNodeB()).getMaterial().getParam("Color").getValue();
+                    if (rgb.equals(ColorRGBA.Red)){
+                        peloticas_killed++;
+                        count.setText(peloticas_killed.toString());
+                        rootNode.detachChild(event.getNodeB());
+                        bulletAppState.getPhysicsSpace().remove(event.getNodeB());  
+                    }
+                }
+            }
+        }
+    }
+    
+    //TODO audio
+    //los demás modelos de los pucks
+    //los demás jugadores (clase players)
+    //la GUI de los otros jugadores
+    //Ajustar la cámara
+    //la función que ajusta cada cuanto debe dispararse la pelotica
+    //la función que determina la velocidad de la pelotica
+    //poner bonitico el código porque nawebona de asco que da esto
 }
        
