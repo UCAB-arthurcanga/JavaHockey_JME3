@@ -1,5 +1,6 @@
 package jme3test.helloworld;
 
+import HelloJME3.GUI;
 import com.jme3.app.SimpleApplication;
 import com.jme3.material.Material;
 import com.jme3.material.RenderState.*;
@@ -31,6 +32,7 @@ import com.jme3.system.Timer;
 import com.jme3.input.controls.AnalogListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.input.KeyInput;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -41,8 +43,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class HelloJME3 extends SimpleApplication implements PhysicsCollisionListener{
 
     public static void main(String[] args) {
-        HelloJME3 app = new HelloJME3();
-        app.start();
+        //HelloJME3 app = new HelloJME3();
+        GUI interfaz = new GUI("Player 1");
     }
     
     private PhysicsSpace getPhysicsSpace(){
@@ -100,14 +102,14 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
     private RigidBodyControl    cannon2_phy;
     private RigidBodyControl    cannon3_phy;
     private RigidBodyControl    cannon4_phy;
-    private Spatial             puck;
-    private RigidBodyControl    puck_physics;
+    private Spatial             puck,puck2;
+    private RigidBodyControl    puck_physics,puck_phy2;
     private Geometry ball_geo;
     private Geometry ball_geo2;
     private Geometry ball_geo3;
     private Geometry ball_geo4;
     
-    private player player1;
+    private player player1,player2;
     
     private BulletAppState bulletAppState;
     
@@ -137,12 +139,17 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
     }
     
     public void initPuck(){
-        puck = assetManager.loadModel("Models/Circle.mesh.xml");
-        puck.setLocalTranslation(0f, 0f, 0f);
+        puck  = assetManager.loadModel("Models/Circle.mesh.xml");
+        puck2 = assetManager.loadModel("Models/Circle.mesh.xml");
+        puck.setLocalTranslation(0f, 0f, 4f);
+        puck2.setLocalTranslation(0f,0f,-4f);
+        puck2.setName("player2");
         puck.setName("player1");
         rootNode.attachChild(puck);
+        rootNode.attachChild(puck2);
         //A esto me refiero, lo coloqué pero nunca uso el objeto, tengo que reconfigurar como usarlo
-        player1=new player(puck, puck_physics, p1,ColorRGBA.Red,"ElPatoMacho",1);
+        player1 = new player(puck, puck_physics, p1,ColorRGBA.Red,"ElPatoMacho",1);
+        player2 = new player(puck2,puck_physics,p2,ColorRGBA.Blue,"equisde",1);
     }
     
     Geometry corner1_geo = new Geometry("Corner", corner1);
@@ -156,6 +163,8 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
     Geometry cannon4_geo = new Geometry("Cannon", cannon4);
 
     
+    
+    ScheduledThreadPoolExecutor executor;
     @Override
     public void simpleInitApp() {
         bulletAppState = new BulletAppState();
@@ -170,14 +179,14 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         sun.setDirection(new Vector3f(-0.1f, -0.7f, -1.0f));
         rootNode.addLight(sun);
         
-        //cam.setLocation(new Vector3f(0,4f,6f));
-        //cam.lookAt(new Vector3f(2,2,0), Vector3f.UNIT_Y);
-        flyCam.setEnabled(true);
-        flyCam.setMoveSpeed(10);
-        flyCam.setRotationSpeed(10);
+        cam.setLocation(new Vector3f(0f,5f,10f));
+        cam.lookAt(new Vector3f(0,1.5f,5), Vector3f.UNIT_Y);
+        flyCam.setEnabled(false);
         
-        //inputManager.addMapping("shoot",
-            //new MouseButtonTrigger(MouseInput.BUTTON_LEFT));
+        //Probando Multithreads
+        executor = new ScheduledThreadPoolExecutor(4);
+        
+        
         //inputManager.addListener(actionListener, "shoot");
         /** Initialize the scene, materials, and physics space */
         initMaterials();
@@ -188,6 +197,7 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         initCol();
         initPorterias();
         initHUD();
+        initKeys();
         
         /*
         flyCam.setEnabled(false);
@@ -204,7 +214,13 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         getPhysicsSpace().addCollisionListener(this);
         
         //initKeys();
-        
+
+    }
+    
+    @Override
+    public void destroy() {
+        super.destroy();
+        executor.shutdown();
     }
     
     
@@ -222,12 +238,12 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
             if (isRunning){
                 if (name.equals("Derecha")){
                     Vector3f v = puck.getLocalTranslation();
-                    v.x+=value*speed*5;
+                    v.x+=value*speed*3;
                     puck_physics.setPhysicsLocation(v);
                 }
                 if (name.equals("Izquierda")){
                     Vector3f v = puck.getLocalTranslation();
-                    v.x-=value*speed*5;
+                    v.x-=value*speed*3;
                     puck_physics.setPhysicsLocation(v);
                 }
             }  else {
@@ -267,6 +283,7 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         rootNode.attachChild(ball_geo2);
     }
     
+    
     public void makeCannon3(){
         Geometry ball_geo3 = new Geometry("cannon ball", sphere);
         ball_geo3.setMaterial(stone_mat);
@@ -297,7 +314,7 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         rootNode.attachChild(ball_geo4);
     }
     
-    Material player1_mat;
+    Material player1_mat,player2_mat;
     
     public void initMaterials(){
         
@@ -327,6 +344,9 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         
         cannon_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         cannon_mat.setColor("Color", ColorRGBA.Blue);
+        
+        player2_mat = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
+        player2_mat.setColor("Color", ColorRGBA.Blue);
         
         player1_mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         player1_mat.setColor("Color",ColorRGBA.Red);
@@ -461,7 +481,7 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
                                         
         // Add the names to the action listener.
         inputManager.addListener(actionListener, "Pause");
-        inputManager.addListener(analogListener, "Izquierda", "Derecha");
+        inputManager.addListener(analogListener, new String[]{"Izquierda", "Derecha"});
 
     }
     
@@ -483,15 +503,24 @@ public class HelloJME3 extends SimpleApplication implements PhysicsCollisionList
         } 
     }
     
-    private CollisionShape puckCol;
+    private CollisionShape puckCol,puckCol2;
     
     public void initCol(){
         puckCol = CollisionShapeFactory.createMeshShape((Node) puck);
         puck_physics = new RigidBodyControl(puckCol, 0f);
         puck_physics.setRestitution(1.5f);
-        puck.addControl(puck_physics);
+        puck.addControl(puck_physics); 
         puck_physics.setCcdMotionThreshold(Float.MIN_VALUE);
         bulletAppState.getPhysicsSpace().add(puck_physics);
+        
+        puckCol = CollisionShapeFactory.createMeshShape((Node)puck2);
+        puck_phy2 = new RigidBodyControl(puckCol,0f);
+        puck_phy2.setRestitution(1.5f);
+        puck2.addControl(puck_phy2);
+        puck_phy2.setCcdMotionThreshold(Float.MIN_VALUE);
+        bulletAppState.getPhysicsSpace().add(puck_phy2);
+        
+       
     }
     
     Geometry p1 = new Geometry("porteria",porteria_h);
